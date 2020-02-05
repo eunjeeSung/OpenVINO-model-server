@@ -24,6 +24,7 @@ from tensorflow.python.framework import dtypes as dtypes
 from tensorflow.python.framework import tensor_util as tensor_util
 import tensorflow.contrib.util as tf_contrib_util
 # import tensorflow.contrib.util as tf_contrib_util
+from ie_serving.config import GLOBAL_CONFIG
 from ie_serving.models.shape_management.utils import BatchingMode, ShapeMode
 from ie_serving.server.constants import \
     INVALID_INPUT_KEY, INVALID_SHAPE, INVALID_BATCHSIZE, GRPC, REST
@@ -100,7 +101,13 @@ def prepare_input_data(target_engine, data, service_type):
     return inference_input, None
 
 
-def prepare_output_as_list(inference_output, model_available_outputs):
+def prepare_output(inference_output, model_available_outputs):
+    if GLOBAL_CONFIG['configuration'] == 'legacy':
+        return _prepare_output_as_list(inference_output, model_available_outputs)
+    return _prepare_output_with_tf(inference_output, model_available_outputs)
+
+
+def _prepare_output_as_list(inference_output, model_available_outputs):
     response = predict_pb2.PredictResponse()
     for key, value in model_available_outputs.items():
         if value in inference_output:
@@ -124,14 +131,10 @@ prepare_output_as_list
 '''
 
 
-def prepare_output_with_tf(inference_output, model_available_outputs):
+def _prepare_output_with_tf(inference_output, model_available_outputs):
     response = predict_pb2.PredictResponse()
     for output in model_available_outputs:
         model_output = model_available_outputs[output]
         response.outputs[output].CopyFrom(
-            tf_contrib_util.make_tensor_proto(
-                inference_output[model_output],
-                shape=inference_output[model_output].shape,
-                dtype=dtypes.as_dtype(inference_output[model_output].dtype).
-                as_datatype_enum))
+            tf_contrib_util.make_tensor_proto(inference_output[model_output]))
     return response
